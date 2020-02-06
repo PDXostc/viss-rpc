@@ -262,7 +262,7 @@ async def process_ws_request(websocket, path):
         while True:
             raw_json = await websocket.recv()
             json_obj = json.loads(raw_json)
-            print("RECEIVED FROM CLIENT:")
+            print("\n\n\nRECEIVED FROM CLIENT:")
             print(json.dumps(json_obj, indent=2, sort_keys = False))
             print("-----\n")
 

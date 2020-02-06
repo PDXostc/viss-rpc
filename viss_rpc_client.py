@@ -34,7 +34,7 @@ def usage(name):
     print("            <type> can be: int8, uint8, int16, uint16, int32, uint32")
     print("                           bool, float, double, string")
     print("            Variable-length string argument type has the format: string:<string>")
-    print(f"Example: {sys.argv[0]} -S ws://localhost:8088 -s Vehicle.DriveTrain.FuelSystem.Level -c 'print_name_and_age string:32:Bob int32:42'")
+    print(f"Example: {sys.argv[0]} -S ws://localhost:8088 -s Vehicle.DriveTrain.FuelSystem.Level -c 'print_name_and_age string:1:Bob int32:42'")
 
 
 def get_next_request_id():
@@ -142,7 +142,7 @@ async def process_websocket(ws):
     raw_json = await ws.recv()
     json_obj = json.loads(raw_json)
 
-    print("RECEIVED FROM server:")
+    print("\n\n\nRECEIVED FROM server:")
     print(json.dumps(json_obj, indent=2, sort_keys = False))
 
     print("-----\n")

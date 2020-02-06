@@ -156,7 +156,7 @@ or
 #### 3 - Start `viss-rpc_server.`
 
     cd viss-rpc
-    ./viss-rpc-server.py
+    ./viss_rpc_server.py
 
 The server will wait for inbound calls and, sporadically, publish
 signals to subscribers.
