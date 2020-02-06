@@ -29,7 +29,6 @@ and signal deliveries into a single call flow.
 
 The steps executed are as follows.
 
-
 #### 1,2 - Signal Subscription
 
 Signal subscribption will bfe done through the `subscribeRequest` and
@@ -127,7 +126,7 @@ The following combinations can be returned in `code`, `reason`, and `message`
 Signal delivery will be done through the `subscriptionNotification` schema specified
 in the [VISS Spec](https://www.w3.org/TR/vehicle-information-service/#dfn-subscriptionnotification).
 
-# Subscribing to signals outside function calls
+## Subscribing to signals outside function calls
 Signals can be subscribed to outside the use case of remote function
 calls as specified by the current specification, as shown in fig 3.
 
@@ -140,23 +139,36 @@ deliver a signal to the VISS client on its own in iniative, for example
 due to an external event suc as the volume dial being turned by the
 driver.
 
-# REFERENCE IMPLEMENTATION INSTALLATION
+# Installing and running the sample implementation
 
-## 1.1 - Install prerequisite packets
+#### 1 - Install prerequisite packets
 
-    sudo apt install python3-websockets # python3-distutils python3-dev python3-setuptools
+    sudo apt install python3-websockets
 
-## 1.2 - Clone the VISS
+#### 2 - Clone the VISS
 
-    git clone XXX
+    git clone git@github.com:PDXostc/viss-rpc.git
 
-## 1.3 - Start `viss-rpc_server.`
+or
+
+    git clone https://github.com/PDXostc/viss-rpc.git
+
+#### 3 - Start `viss-rpc_server.`
 
     cd viss-rpc
     ./viss-rpc-server.py
 
+The server will wait for inbound calls and, sporadically, publish
+signals to subscribers.
 
-## 1.4 - Run a simple RPC call
+#### 4 - Run a simple RPC call
 
+    ./viss_rpc_client.py -S ws://localhost:8088 -s Vehicle.DriveTrain.FuelSystem.Level -c 'print_name_and_age string:1:Bob int32:42'
 
-    ./viss-rpc-client.py
+The client will subscribe to `Vehicle.DriveTrain.FuelSystem.Level` and
+then invoke `print_name_and_age` with a string and an int as an
+argument.
+
+The server will pick up the call and send back a pre-define reply.
+
+The output will provide all JSON calls, both for signals and RPCs.

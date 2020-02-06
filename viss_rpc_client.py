@@ -17,6 +17,7 @@ import sys
 import getopt
 
 pending_subscription_req = {}
+pending_calls = {}
 subscriptions = {}
 
 def die(msg):
@@ -33,7 +34,7 @@ def usage(name):
     print("            <type> can be: int8, uint8, int16, uint16, int32, uint32")
     print("                           bool, float, double, string")
     print("            Variable-length string argument type has the format: string:<string>")
-    print(f"Example: {sys.argv[0]} ws://localhost:4711 print_name_and_age string:32 'Bob Smith' int32:42")
+    print(f"Example: {sys.argv[0]} -S ws://localhost:8088 -s Vehicle.DriveTrain.FuelSystem.Level -c 'print_name_and_age string:32:Bob int32:42'")
 
 
 def get_next_request_id():
@@ -42,8 +43,43 @@ def get_next_request_id():
 
 get_next_request_id.request_id = 0
 
+def process_call_reply(json_obj):
+    global pending_calls
+
+    # Sanity check reply
+    if not 'requestId' in json_obj:
+        print("Error: Got a call reply with no 'requestId' element.")
+        sys.exit(255)
+
+    if 'error' in json_obj and not 'reply' in json_obj:
+        print("Error: Got a successful call reply with no 'reply' object.")
+        sys.exit(255)
+
+    # Caller has verified that requestId is in json_obj
+    request_id = json_obj['requestId']
+
+    if not request_id in pending_calls:
+        print("Error: Got a call reply for request ID {request_id} that was not pending.")
+        sys.exit(255)
+
+    # Remove from pending calls.
+    pending_calls.pop(request_id)
+
+    if 'error' in json_obj:
+        print(f"Call error reply requestId: {request_id} error: {json_obj['error']}")
+    else:
+        print(f"Call success reply requestId: {request_id} reply: {json_obj['reply']}")
+
+
+
 def process_subscribe_reply(json_obj):
     global subscriptions
+    global pending_subscription_req
+
+    # Sanity check reply
+    if not 'requestId' in json_obj:
+        print("Error: Got a subscribption reply with no 'requestId' element.")
+        sys.exit(255)
 
     # Caller has verified that requestId is in json_obj
     request_id = json_obj['requestId']
@@ -64,7 +100,7 @@ def process_subscribe_reply(json_obj):
 
     subscriptions[subscription_id] = signal
 
-    print(f"Received subscription reply RequestID({request_id}) -> SubscriptionID({subscription_id}) -> {signal}")
+    print(f"Subscription reply Signal: {signal} SubscriptionID: {subscription_id}")
 
 
 def display_subscription(json_obj):
@@ -94,7 +130,7 @@ def display_subscription(json_obj):
     else:
         timestamp = json_obj['timestamp']
 
-    print(f"Received subscription: subscriptionId: -> {subscriptionId} -> {value} -> {timestamp}")
+    print(f"Received subscription: subscriptionId: {subscriptionId}  Value: {value}")
 
 
 def display_error_response(json_obj):
@@ -103,22 +139,22 @@ def display_error_response(json_obj):
 
 
 async def process_websocket(ws):
-
     raw_json = await ws.recv()
     json_obj = json.loads(raw_json)
 
     print("RECEIVED FROM server:")
-    print(raw_json)
+    print(json.dumps(json_obj, indent=2, sort_keys = False))
+
     print("-----\n")
     if not 'action' in json_obj:
         print("Error: Missing 'action' in traffic from server")
 
     if json_obj['action'] == 'subscribe':
-        print('subscribe means server is responding to a subscribe request')
         process_subscribe_reply(json_obj)
     elif json_obj['action'] == 'subscription':
-        print('Received subscription notification from server publishing a signal')
         display_subscription(json_obj)
+    elif json_obj['action'] == 'reply':
+        process_call_reply(json_obj)
     else:
         print('Error: received unknown action')
 
@@ -151,7 +187,7 @@ async def process_rpc_call(ws, cmd_array):
 
         arg_type = arg[:first_colon]
         if arg_type not in ["int8", "uint8", "int16", "uint16", "int32", "uint32",
-                            "bool", "float", "double", "string", "callback" ]:
+                            "bool", "float", "double", "string" ]:
             print(f"Argument {arg} has an unknown type: {arg_type}")
             print("Please use one of:")
             print("  int8, uint8, int16, uint16, int32, uint32")
@@ -182,25 +218,28 @@ async def process_rpc_call(ws, cmd_array):
             "value": arg_val
         })
 
+    request_id = get_next_request_id()
     json_cmd = {
         "action": "call",   # This is a remote procedure call
-        "requestId": get_next_request_id(),  # Arbitrary transaction ID to be sent back with reply
+        "requestId": request_id,
         "function": func_name,
         "arguments": arg_arr
     }
 
-    print("Sending Command: {}\n".format(json.dumps(json_cmd, indent=2)))
+    pending_calls[request_id] = True
+    print("Sending call: {}\n".format(json.dumps(json_cmd, indent=2)))
     await ws.send(json.dumps(json_cmd))
 
 
-async def main_loop(signal_sub, args):
-    async with websockets.connect(args[0]) as ws:
+async def main_loop(server, call_array, signal_sub):
+    async with websockets.connect(server) as ws:
         for signal in signal_sub:
             await subscribe_to_signal(ws, signal)
 
         # Send a command, if we have any.
-        if len(args) > 1:
-            await process_rpc_call(ws, args[1:])
+        for call in call_array:
+            call_argv = call.split(" ")
+        await process_rpc_call(ws, call_argv)
 
         # Process the reply from the command sent above
         # and signals. Abort with Ctrl-c
@@ -210,7 +249,7 @@ async def main_loop(signal_sub, args):
 if __name__ == "__main__":
     signal_sub = []
     server = None
-    call = ""
+    calls = []
     try:
         opts, args = getopt.getopt(sys.argv[1:], "S:s:c:", ["subscribe=", "server=", "call="])
     except getopt.GetoptError as err:
@@ -227,7 +266,7 @@ if __name__ == "__main__":
             server = a
         elif o == "-c":
             print("Call {}".format(a))
-            call = a
+            calls.append(a)
         else:
             assert False, "unhandled option"
 
@@ -237,7 +276,7 @@ if __name__ == "__main__":
         usage(sys.argv[0])
         sys.exit(255)
 
-    if not call:
+    if len(calls) == 0:
         print("""\nNo call using -c 'function [arg] [...]' specified.\n""")
         usage(sys.argv[0])
         sys.exit(255)
@@ -248,4 +287,8 @@ if __name__ == "__main__":
         sys.exit(255)
 
     print(f"Arguments: {args}")
-    asyncio.get_event_loop().run_until_complete(main_loop(server, call, signal_sub))
+
+    try:
+        asyncio.get_event_loop().run_until_complete(main_loop(server, calls, signal_sub))
+    except KeyboardInterrupt:
+        pass
