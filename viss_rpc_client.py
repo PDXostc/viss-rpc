@@ -145,7 +145,7 @@ async def process_websocket(ws):
     print("\n\n\nRECEIVED FROM server:")
     print(json.dumps(json_obj, indent=2, sort_keys = False))
 
-    print("-----\n")
+    print("-----")
     if not 'action' in json_obj:
         print("Error: Missing 'action' in traffic from server")
 
